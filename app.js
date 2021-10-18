@@ -3,7 +3,7 @@ require("./config/database").connect();
 const mongoose = require("mongoose");
 require('./model/Post');
 require('./model/Category');
-require('./model/comment');
+require('./model/Comment');
 var bcrypt = require('bcryptjs');
 const jwt = require("jsonwebtoken");
 const User = require("./model/user");
@@ -13,10 +13,11 @@ app.use(express.json());
 var Post = mongoose.model('Post');
 var user = mongoose.model('user');
 var Category = mongoose.model('Category');
-
+var Comment =mongoose.model('Comment')
 var router = express.Router();
 var bodyParser = require('body-parser');
 const auth = require("./middleware/auth");
+const { json } = require("express");
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
@@ -148,28 +149,26 @@ app.post('/api/user/:id', auth, function (req, res) {
 })
 
 //delet user by id 
-app.delete('/api/user/:user',auth,function(req,res){
+app.delete('/api/user/:user', auth, function (req, res) {
     console.log("Deleting user with ID: " + req.params.user);
 
-    user.findById(req.params.user).exec(function(err,doc){
-        if(err || !doc){
-            res.statusCode =404 ;
-            res.send({message:"User not found !"});
+    user.findById(req.params.user).exec(function (err, doc) {
+        if (err || !doc) {
+            res.statusCode = 404;
+            res.send({ message: "User not found !" });
         }
         else {
-            doc.remove(function(err){
-                if(err){
-                    res.statusCode = 403 ;
-                    res.send({ message:"Erreur :"})
+            doc.remove(function (err) {
+                if (err) {
+                    res.statusCode = 403;
+                    res.send({ message: "Erreur :" })
                 }
-                else{
-                    res.send({ message:"user deleted"})
+                else {
+                    res.send({ message: "user deleted" })
                 }
             })
         }
     });
-
-
 });
 
 //Post methodes 
@@ -225,20 +224,95 @@ app.get('/api/posts/:post', function (req, res, next) {
     })
 })
 
+app.param('post', function (req, res, next, id) {
+    var query = Post.findById(id);
+    query.exec(function (err, post) {
+        if (err) { return next(err); }
+        if (!post) { return next(new Error('can\'t find post')); }
+        req.post = post;
+        return next();
+    });
+});
+
+//upvote post
+app.put('/api/posts/upvote/:post', auth, function (req, res, next) {
+    req.post.upvote(function (err, post) {
+        if (err) { return next(err); }
+        res.json(post);
+    });
+});
+
+//downvote post
+app.put('/api/posts/downvote/:post', auth, function (req, res, next) {
+    req.post.downvote(function (err, post) {
+        if (err) { return next(err); }
+        res.json(post);
+    });
+});
+
+//close post
+app.put('/api/posts/close/:post', auth, function (req, res, next) {
+
+    req.post.close(function (err, post) {
+        if (err) { return next(err); }
+        res.json(post);
+    });
+});
+//open post 
+app.put('/api/posts/open/:post', auth, function (req, res, next) {
+    req.post.open(function (err, post) {
+        if (err) { return next(err); }
+        res.json(post);
+    });
+});
 
 
+//delet post 
 
+app.delete('/api/post/delet/:userId/:postId', auth, function (req, res) {
+    Post.findById(req.params.postId).exec(function (err, doc) {
+        if (err || !doc) {
+            res.statusCode = 404;
+            res.send({ message: "Post not found !" });
+        }
+        else {
+            user.findById(req.params.userId).exec(function (err, user) {
+                if (err || !user) {
+                    res.statusCode = 404
+                    res.send({ message: "User not found" })
+                }
+                else {
+                    if (req.params.userId == doc.user._id) {
+                        user.posts.pull({ _id: req.params.postId });
+                        user.numposts--;
+                        user.save()
+                        Post.findByIdAndDelete(req.params.postId).exec(function (err, doc) {
+                            if (!doc) {
+                                res.statusCode = 404
+                                res.send({ message: "Post Not Found" })
+                            }
+                            else {
+                                res.statusCode = 200
+                                res.send({ message: "Post deleted !" })
 
+                            }
+                        })
+                    }
+                }
+            })
+        }
+    })
+})
 // category function
 
 //create category
 app.post('/api/category', auth, (req, res) => {
-    catName=req.body.categoryname
-    cat=catName.toUpperCase()
+    catName = req.body.categoryname
+    cat = catName.toUpperCase()
     var category = new Category({
-        "categoryname":cat,
-        "categorydescription":req.body.categorydescription,
-        "createdBy":req.body.createdBy
+        "categoryname": cat,
+        "categorydescription": req.body.categorydescription,
+        "createdBy": req.body.createdBy
     });
 
     let userId = category.createdBy._id;
@@ -259,10 +333,42 @@ app.post('/api/category', auth, (req, res) => {
                     }
                     res.json(category)
                 }
-                )}
+                )
+            }
         }
     });
 })
+
+//edit post 
+app.put('/api/post/edit/:id', auth, function (req, res) {
+    oldPostId = req.params.id;
+    var option = { new: true };
+    var update;
+    Post.findById(oldPostId, function (err, post) {
+        if (!post) {
+            res.statusCode = 404
+            res.send({ message: "Post not found" })
+        }
+        else {
+            //console.log()
+             update = {
+                title: req.body.title,
+                content: req.body.content,
+                category: post.category
+            };
+            Post.findByIdAndUpdate(oldPostId, update, option, function (err, post) {
+               if(post){
+                //res.json(post)
+                res.send({ message: "Post Updated" })
+
+               }
+            })    
+        }
+ 
+    })
+   // res.send(json(post))
+})
+
 // get all categorys
 app.get('/api/category', (req, res, next) => {
 
@@ -283,17 +389,101 @@ app.get('/api/category/:id', (req, res) => {
 })
 
 //get category by name
-app.get('/api/categorys/:categoryname', function(req, res, next) {
-    catName= req.params.categoryname;
-   Category.findOne({categoryname: req.params.categoryname.toUpperCase()}, function(req,category){
-    if (!category){
-        return res.status(404).send({message:"Category not found with name "+catName})
-    }
-    else{
-        res.json(category)
-    }
-   })
+app.get('/api/categorys/:categoryname', function (req, res, next) {
+    catName = req.params.categoryname;
+    Category.findOne({ categoryname: req.params.categoryname.toUpperCase() }, function (req, category) {
+        if (!category) {
+            return res.status(404).send({ message: "Category not found with name " + catName })
+        }
+        else {
+            res.json(category)
+        }
+    })
 })
 
+
+//comment post
+//comment router
+app.param('Comment', function(req, res, next, id) {
+    var query = Comment.findById(id);
+    query.exec(function (err, comment){
+      if (err) { return next(err); }
+      if (!comment) { return next(new Error('can\'t find comment')); }
+      req.comment = comment;
+      return next();
+    });
+  });
+  //add new comment
+app.post('/api/comments/:post/comments', auth, function(req, res, next) { 
+    var comment = new Comment(req.body);
+    comment.post = req.post;
+    if(req.post.active && comment.content.length> 1){
+        
+        comment.save(function(err, comment){
+            if(err){ return next(err); }
+            req.post.comments.push(comment);
+            req.post.save(function(err, post) {
+            if(err){ return next(err); }
+            res.json(comment);
+            });
+        });
+        User.findOne({ 'id': comment.user._id }, function (err, user) {
+            if (err) return handleError(err);
+                user.addcomment(user);
+                user.comments.push(comment);
+        });
+    }
+    else if(req.post.active && comment.content.length< 1){
+        var err =("Comment can't be empty !")
+        res.send(err)
+        return next(err)
+    }
+    else{
+        var err = ("Failed. The Post Is Inactive.")
+        res.send(err);
+        return next(err);
+    }
+});
+
+//delet comment
+app.delete('/api/comment/delet/:userId/:postId/:commentId', auth, function (req, res) {
+    Comment.findById(req.params.commentId).exec(function (err, doc) {
+        if (err || !doc) {
+            res.statusCode = 404;
+            res.send({ message: "Comment not found !" });
+        }
+        else {
+            user.findById(req.params.userId).exec(function (err, user) {
+                if (err || !user) {
+                    res.statusCode = 404
+                    res.send({ message: "User not found" })
+                }
+                else {
+                    if (req.params.userId == doc.user._id) {
+                        user.comments.pull({ _id: req.params.commentId });
+                        user.numcomments--;
+                        user.save()
+                        
+                        Post.findById(req.params.postId).exec(function(err,post){
+                            post.comments.pull({_id: req.params.commentId});
+                            post.save();
+                        })
+                        Comment.findByIdAndDelete(req.params.commentId).exec(function (err, doc) {
+                            if (!doc) {
+                                res.statusCode = 404
+                                res.send({ message: "Comment Not Found" })
+                            }
+                            else {
+                                res.statusCode = 200
+                                res.send({ message: "Comment deleted !" })
+                            }
+                        })
+                        
+                    }
+                }
+            })
+        }
+    })
+})
 
 module.exports = app;

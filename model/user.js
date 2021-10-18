@@ -19,6 +19,10 @@ userSchema.methods.addpost = function (cb) {
     this.numposts += 1;
     this.save(cb);
 };
+userSchema.methods.removePost =function(cb){
+    this.numposts--;
+    this.save(cb)
+}
 userSchema.methods.addcomment = function (cb) {
     this.numcomments += 1;
     this.save(cb);
