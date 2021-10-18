@@ -463,7 +463,7 @@ app.delete('/api/comment/delet/:userId/:postId/:commentId', auth, function (req,
                         user.comments.pull({ _id: req.params.commentId });
                         user.numcomments--;
                         user.save()
-                        
+
                         Post.findById(req.params.postId).exec(function(err,post){
                             post.comments.pull({_id: req.params.commentId});
                             post.save();
@@ -485,5 +485,23 @@ app.delete('/api/comment/delet/:userId/:postId/:commentId', auth, function (req,
         }
     })
 })
+//upvote comment 
+app.put('/api/comments/upvote/:Comment', auth, function(req, res, next) {
+    req.comment.upvote(function(err, comment){
+        if (err) { return next(err); }
+        res.json(comment);
+    });
+});
+
+//downvote comment
+app.put('/api/comments/downvote/:Comment', auth, function(req, res, next) {
+    req.comment.downvote(function(err, comment){
+        if (err) { return next(err); }
+        res.json(comment);
+    });
+});
+
+
+//update comment 
 
 module.exports = app;
